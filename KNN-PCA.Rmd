@@ -1,0 +1,167 @@
+---
+title: "APLICACIÓN KNN-PCA"
+output:    
+  flexdashboard::flex_dashboard:
+        orientation: columns
+        theme: united
+---
+
+```{r setup, include=FALSE}
+library(devtools)
+install_github("nik01010/dashboardthemes")
+library(flexdashboard)
+library(plotly)
+library(ggplot2)
+library(leaflet)
+library(factoextra)
+library(FactoMineR)
+library(class)
+library(tidyr)
+library(shiny)
+library(corrplot)
+
+#Leer datos
+diabetes<- read.csv("diabetes.csv")
+#dataset con edades en intervalos
+diabetes2<- diabetes %>% mutate(rango = cut(age, breaks = c(-Inf, 30, 40, 60, 81),
+labels = c("(20 - 30)", "(31 - 40)", "(41 - 60)" ,
+"(61 - 81)")))
+diabetes2 %>% group_by(rango) %>% summarise(mean_preg = round(mean(pregnant), 0))
+#media glucosa para mujeres con mas de 3 embarazos
+diabetes %>% filter(pregnant >3 ) %>% summarise(m_glup3 = mean(glucose))
+
+set.seed(527)
+diabok<- diabetes[, -ncol(diabetes)]
+criteria<- sample(1:nrow(diabok), size = 0.75*nrow(diabok), replace = T)
+train<- diabok[criteria, ]
+test<- diabok[-criteria, ]
+labelx<- diabetes$diabetes[criteria]
+labelxtest<- diabetes$diabetes[-criteria]
+pred<- knn(train = train, test = test, cl = labelx)
+final <- table(labelxtest, pred)
+
+meaan <- round(mean(pred == labelxtest),4)*100
+
+pred15<- knn(train = train, test = test, cl = labelx, k = 27)
+final15 <- table(labelxtest, pred15)
+meaan15 <- round(mean(pred15 == labelxtest),4)*100
+
+pred16<- knn(train = train, test = test, cl = labelx, k = 45)
+final16 <- table(labelxtest, pred16)
+meaan16 <- round(mean(pred16 == labelxtest),4)*100
+
+
+```
+Información {.storyboard width=300}
+===========================================================================
+
+### **Datos** - Relaciona el comportamiento del nivel de glucosa en sangre con variables como edad, número de embarazos y que las mujeres sean diabéticas o no.
+
+
+```{r }
+
+ggplot(diabetes2, aes(x= mass, y = glucose, color = diabetes, size= pregnant))+
+geom_point()+
+facet_wrap(~rango)
+```
+
+### **Boxplot** - El escalado permite ubicar las variables en una misma dimensión, de tal manera que las variables puedan ser comparables y no se le de un peso incorrecto a una por encima de la otra.
+
+
+```{r }
+boxplot(diabetes)
+boxplot(scale(diabetes[, -ncol(diabetes)]))
+```
+
+
+### **Correlación** 
+
+
+```{r }
+diabetes$X<- NULL
+pairs(diabetes[, -ncol(diabetes)])
+pairs(scale(diabetes[, -ncol(diabetes)], center = T))
+```
+
+
+
+
+PCA {.storyboard width=1000 }
+===
+
+### **Componentes Principales** - PCA de los datos escalados 
+
+
+```{r }
+diab_mat<- as.matrix(diabetes[, -ncol(diabetes)])
+diab_sc<- scale(diabetes[, -ncol(diabetes)], center = TRUE)
+d_pca<- PCA(diab_sc)
+```
+
+### **Biplot** - El gráfico de componentes principales muestra que el mayor porcentaje de variabilidad de información es de 47.58% distribuido en las componentes 1 y 2.
+
+```{r }
+fviz_pca_biplot(d_pca, col.ind = diabetes$diabetes)
+
+#Un modelo de predicción es viable, dado que se aprecia una agrupación considerable de los pacientes sanos y otra de los pacientes enfermos.
+```
+
+
+
+KNN 
+===
+Column
+----------------------------------------------------------------------------
+
+### KNN k=1
+```{r }
+valueBox(prettyNum(meaan, big.mark = ','),
+         caption = "Porcentaje de aciertos KNN con K=1",
+               color = "warning")
+
+```
+
+### **Matriz de confusión** - De acuerdo a la matriz de confusión, el modelo predice predice bien los verdaderos positivos y negativos, sin embargo el porcentaje de falsos positivos y negativos todavía puede mejorarse.
+```{r }
+
+fourfoldplot(final,
+             conf.level = 0, margin = 1, main = "Matriz de confusión",
+             c("#ED674B", "#F1C019"))
+```
+
+Column
+----------------------------------------------------------------------------
+
+### KNN k=27
+```{r }
+
+valueBox(prettyNum(meaan15, big.mark = ','),
+         caption = "Porcentaje de aciertos KNN con K=27",
+               color = "warning")
+
+```
+
+### **Matriz de confusión** - el porcentaje de aciertos mejoró, por lo cual el modelo es capaz de predecir la enfermedad con mayor precisión, lo cual se ve reflejado en que los falsos positivos y negativos se redujeron.
+```{r }
+fourfoldplot(final15,
+             conf.level = 0, margin = 1, main = "Matriz de confusión",
+             c("#ED674B", "#F1C019"))
+```
+
+Column
+----------------------------------------------------------------------------
+### KNN k=45
+```{r }
+
+valueBox(prettyNum(meaan16, big.mark = ','),
+         caption = "Porcentaje de aciertos KNN con K=45",
+               color = "warning")
+
+```
+
+### **Matriz de confusión** El K con mayor porcentaje de aciertos es K=45, y se logra un máximo de 75.46%, sin embargo el porcentaje de falsos negativos sigue siendo alto, por lo cual puede concluirse que el sistema confunde los pacientes que en realidad están enfermos pero el sistema clasifica como sanos.
+```{r }
+fourfoldplot(final16,
+             conf.level = 0, margin = 1, main = "Matriz de confusión",
+             c("#ED674B", "#F1C019"))
+```
